@@ -40,12 +40,6 @@ body {
   gap: 18px;
 }
 
-.brand img {
-  width: auto;
-  height: clamp(58px, 7vw, 92px);
-  flex: 0 0 auto;
-}
-
 h1,
 h2 {
   margin: 0;
@@ -386,11 +380,6 @@ footer {
     gap: 12px;
   }
 
-  .brand img {
-    width: auto;
-    height: 56px;
-  }
-
   h1 {
     font-size: 28px;
     line-height: 1.12;
@@ -472,11 +461,6 @@ footer {
 }
 
 @media (max-width: 420px) {
-  .brand img {
-    width: auto;
-    height: 48px;
-  }
-
   h1 {
     font-size: 24px;
   }

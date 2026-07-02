@@ -25,11 +25,6 @@ def build_site(data: dict, output_dir: Path, project_root: Path | None = None) -
     if stale_workbook.exists():
         stale_workbook.unlink()
 
-    root = project_root or Path.cwd()
-    logo_path = root / "Logo" / "CA India Logo.png"
-    if logo_path.exists():
-        shutil.copyfile(logo_path, assets_dir / "ca-india-logo.png")
-
 
 def load_site_data(data_path: Path) -> dict:
     with data_path.open("r", encoding="utf-8") as f:
