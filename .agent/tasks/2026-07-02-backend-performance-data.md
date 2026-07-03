@@ -94,3 +94,49 @@ Add backend-only cumulative performance chart data to the public site JSON so fu
   - Ran `node --check web_export\static\app.js` and `node --check docs\app.js` successfully.
   - Ran `git -c safe.directory="D:/Index Fund" diff --check` successfully; Git reported only line-ending normalization warnings.
   - Served `docs/` locally with `python -B -m http.server 8767 -d docs` and verified `/` and `/data.json` returned HTTP 200, chart markup was present, and the served data retained `2009-01-01` through `2026-03-30` with 43 series.
+- Live deployment closeout on 2026-07-03:
+  - Confirmed `origin/main` points to deployed candidate commit `d13cdcbf28b9e239fc4f63b8ee65cbd4351bb38b` (`Add cumulative performance chart`) with `git -c safe.directory="D:/Index Fund" ls-remote origin refs/heads/main`.
+  - Verified live URL `https://contactme-vasu.github.io/indian-index-funds/?v=d13cdcbf28b9e239fc4f63b8ee65cbd4351bb38b`.
+  - `gh` is not installed in this environment, and the unauthenticated GitHub Pages REST endpoint returned 404, so deployment status was verified from the live Pages response and deployed assets.
+  - Live HTML returned HTTP 200 from GitHub Pages with `Last-Modified: Fri, 03 Jul 2026 02:36:00 GMT`.
+  - Downloaded live `data.json` with the commit cache-busting query string and confirmed the parsed JSON object exactly matches committed `docs/data.json`; raw byte hashes differ because of served formatting/line endings.
+  - Confirmed live `data.performance` has `initialInvestment = 1000`, `currency = INR`, `pointFrequency = monthly`, `startDate = 2009-01-01`, `endDate = 2026-03-30`, and `series count = 43`.
+  - Browser desktop verification on the live page: chart renders below the analysis table, chart text uses `01/01/2009` and `30/03/2026`, all 43 index checkboxes are selected by default, and 43 SVG paths render with no JavaScript console errors.
+  - Browser interaction verification on the live page: Clear sets 0 selected indexes, removes chart paths, and shows the empty state; Select all restores 43 selected indexes and 43 paths; toggling one index hides and restores one line.
+  - Browser mobile verification at 390px width: chart text and dynamic dates render, all 43 indexes are selected by default, 43 paths render, there is no document-level horizontal overflow, and no JavaScript console errors were reported.
+  - No live bug was found, so no product code change, regeneration, commit, or push was needed.
+- Final maintainability and future-refresh audit on 2026-07-03:
+  - Reviewed `AGENTS.md`, this task file, `src/processor.py`, `main.py`, `web_export/static/app.js`, `web_export/static/styles.css`, `web_export/static/index.html`, and `docs/data.json`.
+  - Confirmed production chart dates are recomputed in `build_performance_data()` from the exact shared date intersection across included TRI DataFrames with `startDate = common_dates.min()` and `endDate = common_dates.max()`.
+  - Confirmed no current-cache dates are hardcoded in production chart logic; `2009-01-01` and `2026-03-30` appear only as generated current-cache data or verification notes.
+  - Confirmed `python main.py` still uses `get_end_date()` only for the download refresh range, while the chart payload receives `all_data` and derives its own common-date range from downloaded/cached DataFrames.
+  - Confirmed `docs/data.json` is 923,271 bytes, with `data.performance` about 343,251 compact JSON bytes, 43 series, and 8,944 sampled points, which remains reasonable for GitHub Pages.
+  - Confirmed accessibility basics: the chart section has an `aria-labelledby` heading, dynamic description text, SVG `role="img"`, checkbox controls are native labeled inputs, and Select all/Clear are native buttons usable by keyboard.
+  - Confirmed mobile layout risk is handled by a single-column checkbox grid under 820px and horizontal scrolling inside `.chart-wrap` for the fixed-min-width SVG, avoiding document-level chart overflow.
+  - Confirmed `AGENTS.md` and this task file both document the dynamic common-date rule for future agents.
+  - No maintainability issue requiring product changes was found, so no code change, docs regeneration, commit, or push was performed.
+- Hover/focus highlighting continuation plan on 2026-07-03:
+  - Scope is limited to cumulative performance chart interaction in `web_export/static/app.js`, `web_export/static/styles.css`, and generated static copies under `docs/`.
+  - Add active-series UI state only; do not change analysis table behavior, performance data generation, chart date logic, or INR 1,000 normalization.
+  - Wire SVG line pointer/focus events and checkbox-label pointer/focus events to the same active-series state while keeping checkbox show/hide behavior unchanged.
+  - Add CSS classes for active and dimmed visible chart lines plus active/dimmed legend labels.
+  - Add a non-obstructive SVG label for the active index name/value and keep chart line names available through SVG title/ARIA labels.
+  - Verify syntax with `node --check` for source and generated app JS, and perform local static/browser checks if feasible.
+- Hover/focus highlighting continuation implementation on 2026-07-03:
+  - Added `state.performanceActive` in `web_export/static/app.js` and mirrored it to `docs/app.js`.
+  - Added pointer and focus handlers to each rendered chart line and each checkbox label so chart-line hover/focus and legend hover/focus use the same active-series state.
+  - Added focusable chart paths with per-series `aria-label` values and existing SVG `<title>` names.
+  - Added active/dimmed chart line classes, active/dimmed legend label classes, and an SVG active label showing the highlighted index name and latest displayed value.
+  - Kept Select all, Clear, and individual checkbox visibility behavior unchanged; clearing or hiding the active series also clears the active highlight.
+  - Updated only `web_export/static/app.js`, `web_export/static/styles.css`, `docs/app.js`, `docs/styles.css`, and this task note; `docs/data.json` was not regenerated or changed.
+- Hover/focus highlighting continuation verification on 2026-07-03:
+  - Ran `node --check web_export\static\app.js` successfully.
+  - Ran `node --check docs\app.js` successfully.
+  - Did not run `python main.py`.
+  - Served `docs/` through an in-process local static server and checked the page in local Chrome through Playwright using the existing Chrome executable.
+  - Browser check results: 43 chart lines render initially; hovering a chart line produces 1 active line, 42 dimmed lines, and an active label; hovering a checkbox label produces 1 active line, 42 dimmed lines, and an active label; focusing the first checkbox input produces the same active highlight path.
+  - Confirmed the active SVG label fits inside its label background.
+  - Confirmed keyboard checkbox toggling still hides/restores only the matching line: 43 lines to 42 lines and back to 43 lines.
+  - Confirmed Clear shows 0 lines and the "No indexes selected" empty state, while Select all restores 43 lines.
+  - Confirmed a 390px mobile viewport has no document-level horizontal overflow and still renders 43 chart lines.
+  - Browser console and page-error captures were empty.

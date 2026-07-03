@@ -6,6 +6,7 @@ const state = {
   search: "",
   amcOnly: false,
   performanceSelected: new Set(),
+  performanceActive: null,
 };
 
 const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
@@ -236,6 +237,11 @@ function renderPerformanceControls(performance) {
     const color = chartColors[index % chartColors.length];
     const label = document.createElement("label");
     label.className = "performance-toggle";
+    label.dataset.seriesName = series.indexName;
+    label.addEventListener("pointerenter", () => setActivePerformanceSeries(series.indexName));
+    label.addEventListener("pointerleave", () => clearActivePerformanceSeries(series.indexName));
+    label.addEventListener("focusin", () => setActivePerformanceSeries(series.indexName));
+    label.addEventListener("focusout", () => clearActivePerformanceSeries(series.indexName));
 
     const swatch = document.createElement("span");
     swatch.className = "performance-swatch";
@@ -249,6 +255,9 @@ function renderPerformanceControls(performance) {
         state.performanceSelected.add(series.indexName);
       } else {
         state.performanceSelected.delete(series.indexName);
+      }
+      if (!state.performanceSelected.has(state.performanceActive)) {
+        state.performanceActive = null;
       }
       renderPerformanceChart(performance);
     });
@@ -285,10 +294,15 @@ function renderPerformanceChart(performance) {
   const yMin = minValue;
   const yMax = maxValue + valuePadding;
   const visibleCount = performance.series.filter((series) => state.performanceSelected.has(series.indexName)).length;
+  const activeSeries = state.performanceSelected.has(state.performanceActive) ? state.performanceActive : null;
 
   chart.setAttribute("viewBox", `0 0 ${width} ${height}`);
   chart.setAttribute("preserveAspectRatio", "xMidYMid meet");
-  chart.setAttribute("aria-label", "Cumulative performance line chart");
+  chart.setAttribute("aria-label", activeSeries ? `Cumulative performance line chart, ${activeSeries} highlighted` : "Cumulative performance line chart");
+  chart.onpointerleave = () => {
+    state.performanceActive = null;
+    updatePerformanceHighlight();
+  };
 
   const xScale = (dateValue) => margin.left + ((dateValue - minTime) / (maxTime - minTime || 1)) * plotWidth;
   const yScale = (value) => margin.top + (1 - ((value - yMin) / (yMax - yMin || 1))) * plotHeight;
@@ -296,6 +310,7 @@ function renderPerformanceChart(performance) {
   const gridGroup = svgElement("g", { class: "chart-grid" });
   const axisGroup = svgElement("g", { class: "chart-axis" });
   const lineGroup = svgElement("g", { class: "chart-lines" });
+  const labelGroup = svgElement("g", { class: "chart-active-label" });
 
   for (const tickValue of yTicks(yMin, yMax, 5)) {
     const y = yScale(tickValue);
@@ -345,18 +360,51 @@ function renderPerformanceChart(performance) {
       .join(" ");
 
     if (!pathData) return;
+    const isActive = series.indexName === activeSeries;
     const path = svgElement("path", {
-      class: "chart-line",
+      class: [
+        "chart-line",
+        isActive ? "is-active" : "",
+        activeSeries && !isActive ? "is-dimmed" : "",
+      ].filter(Boolean).join(" "),
       d: pathData,
       stroke: chartColors[index % chartColors.length],
+      tabindex: "0",
+      role: "img",
+      "aria-label": `${series.indexName} cumulative performance`,
+      "data-series-name": series.indexName,
     });
+    path.addEventListener("pointerenter", () => setActivePerformanceSeries(series.indexName));
+    path.addEventListener("pointerleave", () => clearActivePerformanceSeries(series.indexName));
+    path.addEventListener("focus", () => setActivePerformanceSeries(series.indexName));
+    path.addEventListener("blur", () => clearActivePerformanceSeries(series.indexName));
     const title = svgElement("title");
     title.textContent = series.indexName;
     path.appendChild(title);
     lineGroup.appendChild(path);
+
+    if (isActive) {
+      const lastPoint = [...(series.points || [])]
+        .reverse()
+        .find((point) => Number.isFinite(Number(point.value)) && !Number.isNaN(parseDate(point.date)));
+      if (lastPoint) {
+        const labelText = `${series.indexName}: ${formatInr(Number(lastPoint.value))}`;
+        const labelWidth = Math.min(labelText.length * 7.2 + 16, width - margin.left - margin.right);
+        const labelX = Math.min(xScale(parseDate(lastPoint.date)) + 10, width - margin.right - labelWidth + 8);
+        const labelY = Math.max(yScale(Number(lastPoint.value)) - 12, margin.top + 16);
+        labelGroup.appendChild(svgElement("rect", {
+          x: labelX - 8,
+          y: labelY - 18,
+          width: labelWidth,
+          height: 26,
+          rx: 4,
+        }));
+        labelGroup.appendChild(svgText(labelX, labelY, labelText, "start", "chart-active-label-text"));
+      }
+    }
   });
 
-  chart.append(gridGroup, axisGroup, lineGroup);
+  chart.append(gridGroup, axisGroup, lineGroup, labelGroup);
 
   if (visibleCount === 0) {
     chart.appendChild(svgText(width / 2, height / 2, "No indexes selected", "middle", "chart-empty"));
@@ -377,8 +425,33 @@ function setAllPerformanceSeries(checked) {
   const performance = state.data.performance;
   if (!hasPerformanceData(performance)) return;
   state.performanceSelected = new Set(checked ? performance.series.map((series) => series.indexName) : []);
+  state.performanceActive = null;
   renderPerformanceControls(performance);
   renderPerformanceChart(performance);
+}
+
+function setActivePerformanceSeries(indexName) {
+  if (!state.performanceSelected.has(indexName)) return;
+  state.performanceActive = indexName;
+  updatePerformanceHighlight();
+}
+
+function clearActivePerformanceSeries(indexName) {
+  if (state.performanceActive !== indexName) return;
+  state.performanceActive = null;
+  updatePerformanceHighlight();
+}
+
+function updatePerformanceHighlight() {
+  const performance = state.data.performance;
+  if (!hasPerformanceData(performance)) return;
+  renderPerformanceChart(performance);
+  document.querySelectorAll(".performance-toggle").forEach((label) => {
+    const isActive = label.dataset.seriesName === state.performanceActive;
+    const shouldDim = Boolean(state.performanceActive) && label.dataset.seriesName !== state.performanceActive;
+    label.classList.toggle("is-active", isActive);
+    label.classList.toggle("is-dimmed", shouldDim);
+  });
 }
 
 function renderFooter() {

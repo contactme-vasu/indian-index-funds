@@ -302,12 +302,23 @@ input[type="search"]:focus {
   color: var(--ink);
   font-size: 12px;
   line-height: 1.25;
+  border-radius: 4px;
+  transition: color 120ms ease, opacity 120ms ease;
 }
 
 .performance-toggle input {
   width: 16px;
   height: 16px;
   margin: 0;
+}
+
+.performance-toggle.is-active {
+  color: var(--blue-dark);
+  font-weight: 700;
+}
+
+.performance-toggle.is-dimmed {
+  opacity: 0.48;
 }
 
 .performance-swatch {
@@ -359,6 +370,35 @@ input[type="search"]:focus {
   stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  outline: none;
+  transition: opacity 120ms ease, stroke-width 120ms ease;
+}
+
+.chart-line.is-active,
+.chart-line:focus {
+  stroke-width: 4;
+  opacity: 1;
+}
+
+.chart-line.is-dimmed {
+  opacity: 0.18;
+}
+
+.chart-active-label {
+  pointer-events: none;
+}
+
+.chart-active-label rect {
+  fill: #ffffff;
+  stroke: var(--line);
+  stroke-width: 1;
+  filter: drop-shadow(0 2px 6px rgba(17, 24, 39, 0.12));
+}
+
+.chart-active-label-text {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .performance-unavailable {
