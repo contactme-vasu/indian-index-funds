@@ -384,6 +384,17 @@ input[type="search"]:focus {
   opacity: 0.18;
 }
 
+.chart-hit-line {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  cursor: pointer;
+  outline: none;
+  pointer-events: stroke;
+}
+
 .chart-active-label {
   pointer-events: none;
 }

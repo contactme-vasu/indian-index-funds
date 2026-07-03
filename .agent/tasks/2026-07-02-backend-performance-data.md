@@ -140,3 +140,14 @@ Add backend-only cumulative performance chart data to the public site JSON so fu
   - Confirmed Clear shows 0 lines and the "No indexes selected" empty state, while Select all restores 43 lines.
   - Confirmed a 390px mobile viewport has no document-level horizontal overflow and still renders 43 chart lines.
   - Browser console and page-error captures were empty.
+- Hover hit-target bugfix on 2026-07-03:
+  - User reported that placing the mouse on a chart line did not show the index name.
+  - Reviewed the implementation and found the pointer handler was attached only to the visible 2.2px SVG stroke, making the hover target too narrow for reliable mouse use.
+  - Added a transparent 16px `.chart-hit-line` path over each visible chart line in `web_export/static/app.js` and `docs/app.js`.
+  - Kept the visible `.chart-line` as the highlighted/dimmed visual series and marked it `aria-hidden`; the transparent hit path carries the focus target, `aria-label`, and SVG `<title>`.
+  - Added `.chart-hit-line` styles in `web_export/static/styles.css` and `docs/styles.css` with `pointer-events: stroke`.
+  - Did not change chart data, chart date logic, normalization, analysis table behavior, or `docs/data.json`.
+  - Ran `node --check web_export\static\app.js` successfully.
+  - Ran `node --check docs\app.js` successfully.
+  - Browser verification with local Chrome: 43 visible chart lines and 43 hit paths render; the first hit path has 16px stroke width, `pointer-events: stroke`, `focusable="true"`, and an accessible series label.
+  - Browser verification with local Chrome: hovering a hit path produces 1 active line, 42 dimmed lines, and an active index label with no console or page errors.

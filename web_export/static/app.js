@@ -369,19 +369,26 @@ function renderPerformanceChart(performance) {
       ].filter(Boolean).join(" "),
       d: pathData,
       stroke: chartColors[index % chartColors.length],
+      "aria-hidden": "true",
+      "data-series-name": series.indexName,
+    });
+    const hitPath = svgElement("path", {
+      class: "chart-hit-line",
+      d: pathData,
       tabindex: "0",
+      focusable: "true",
       role: "img",
       "aria-label": `${series.indexName} cumulative performance`,
       "data-series-name": series.indexName,
     });
-    path.addEventListener("pointerenter", () => setActivePerformanceSeries(series.indexName));
-    path.addEventListener("pointerleave", () => clearActivePerformanceSeries(series.indexName));
-    path.addEventListener("focus", () => setActivePerformanceSeries(series.indexName));
-    path.addEventListener("blur", () => clearActivePerformanceSeries(series.indexName));
+    hitPath.addEventListener("pointerenter", () => setActivePerformanceSeries(series.indexName));
+    hitPath.addEventListener("pointerleave", () => clearActivePerformanceSeries(series.indexName));
+    hitPath.addEventListener("focus", () => setActivePerformanceSeries(series.indexName));
+    hitPath.addEventListener("blur", () => clearActivePerformanceSeries(series.indexName));
     const title = svgElement("title");
     title.textContent = series.indexName;
-    path.appendChild(title);
-    lineGroup.appendChild(path);
+    hitPath.appendChild(title);
+    lineGroup.append(path, hitPath);
 
     if (isActive) {
       const lastPoint = [...(series.points || [])]
