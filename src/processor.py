@@ -13,6 +13,7 @@ from dateutil.relativedelta import relativedelta
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _RISK_FREE_FILE = _PROJECT_ROOT / "Auctions of 364-Day Government of India Treasury Bills.xlsx"
 _DEFAULT_LATEST_RETURN_YEARS = (1, 3, 5, 7, 10)
+_PERFORMANCE_INITIAL_INVESTMENT = 1000
 
 
 def _number(value):
@@ -209,6 +210,94 @@ def calculate_sharpe_sortino(df, monthly_risk_free):
     )
 
 
+def build_performance_data(all_data, initial_investment=_PERFORMANCE_INITIAL_INVESTMENT):
+    """Build month-end sampled cumulative performance data from TRI DataFrames."""
+    prepared = {}
+    for index_name, df in all_data.items():
+        if df is None or "Date" not in df.columns or "Total Returns Index" not in df.columns:
+            continue
+
+        series_df = df[["Date", "Total Returns Index"]].copy()
+        series_df["Date"] = pd.to_datetime(series_df["Date"], errors="coerce").dt.normalize()
+        series_df["Total Returns Index"] = pd.to_numeric(
+            series_df["Total Returns Index"],
+            errors="coerce",
+        )
+        series_df = (
+            series_df.dropna(subset=["Date", "Total Returns Index"])
+            .sort_values("Date")
+            .drop_duplicates("Date", keep="last")
+        )
+        if series_df.empty:
+            continue
+
+        prepared[str(index_name)] = series_df.set_index("Date")["Total Returns Index"]
+
+    common_dates = None
+    for series in prepared.values():
+        dates = pd.Index(series.index)
+        common_dates = dates if common_dates is None else common_dates.intersection(dates)
+
+    if common_dates is None or common_dates.empty:
+        return {
+            "initialInvestment": initial_investment,
+            "currency": "INR",
+            "startDate": None,
+            "endDate": None,
+            "pointFrequency": "monthly",
+            "series": [],
+        }
+
+    common_dates = pd.DatetimeIndex(common_dates).sort_values()
+    start_date = common_dates.min()
+    end_date = common_dates.max()
+    sampled_dates = _month_end_sampled_dates(common_dates, start_date, end_date)
+
+    performance_series = []
+    for index_name, series in prepared.items():
+        start_tri = _number(series.loc[start_date])
+        if start_tri is None or start_tri <= 0:
+            continue
+
+        points = []
+        for point_date in sampled_dates:
+            tri = _number(series.loc[point_date])
+            if tri is None:
+                continue
+            points.append(
+                {
+                    "date": point_date.date().isoformat(),
+                    "value": round(initial_investment * tri / start_tri, 2),
+                }
+            )
+
+        performance_series.append(
+            {
+                "indexName": index_name,
+                "points": points,
+            }
+        )
+
+    return {
+        "initialInvestment": initial_investment,
+        "currency": "INR",
+        "startDate": start_date.date().isoformat(),
+        "endDate": end_date.date().isoformat(),
+        "pointFrequency": "monthly",
+        "series": performance_series,
+    }
+
+
+def _month_end_sampled_dates(common_dates, start_date, end_date):
+    month_ends = (
+        pd.Series(common_dates, index=common_dates)
+        .groupby(common_dates.to_period("M"))
+        .max()
+        .tolist()
+    )
+    return pd.DatetimeIndex([start_date, *month_ends, end_date]).drop_duplicates().sort_values()
+
+
 # ========================== BUILD RAW DATA ==========================
 
 def build_analysis(all_data, rolling_years=3, latest_return_years=None):
@@ -281,7 +370,8 @@ def build_analysis(all_data, rolling_years=3, latest_return_years=None):
 
 def build_public_site_data(periods_data, amc_lookup=None, source_lookup=None,
                            latest_return_years=None, data_updated_through=None,
-                           generated_at=None):
+                           generated_at=None, performance_data=None,
+                           excluded_index_names=None):
     """Build public website JSON from calculated raw analysis inputs.
 
     The output intentionally excludes raw TRI values and per-window rolling
@@ -327,7 +417,9 @@ def build_public_site_data(periods_data, amc_lookup=None, source_lookup=None,
                 "url": "https://www.rbi.org.in/",
             },
         ],
+        "excludedIndexes": sorted(str(name) for name in (excluded_index_names or [])),
         "periods": periods,
+        "performance": build_performance_data(performance_data or {}),
     }
 
 

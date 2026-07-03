@@ -27,6 +27,7 @@
       </section>
 
       <section class="metadata-panel" aria-label="Report metadata">
+        <div id="excludedIndexNote" class="data-note" hidden></div>
         <div class="sources">
           <h2>Sources</h2>
           <ul id="sourceList"></ul>
@@ -119,6 +120,24 @@
             </thead>
             <tbody id="rankingBody"></tbody>
           </table>
+        </div>
+      </section>
+
+      <section class="performance-section" aria-labelledby="performanceTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="performanceTitle">Cumulative Performance</h2>
+            <p id="performanceDescription" class="performance-description"></p>
+          </div>
+          <div class="performance-actions" aria-label="Chart selection controls">
+            <button id="performanceSelectAll" type="button">Select all</button>
+            <button id="performanceClear" type="button">Clear</button>
+          </div>
+        </div>
+        <div id="performanceUnavailable" class="performance-unavailable" hidden></div>
+        <div id="performanceControls" class="performance-controls" aria-label="Index series controls"></div>
+        <div class="chart-wrap">
+          <svg id="performanceChart" class="performance-chart" role="img" aria-labelledby="performanceTitle performanceDescription"></svg>
         </div>
       </section>
     </main>

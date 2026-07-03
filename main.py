@@ -117,6 +117,8 @@ def main():
         latest_return_years=LATEST_RETURN_YEARS_LIST,
         data_updated_through=data_updated_through,
         generated_at=datetime.now(tz=timezone.utc).isoformat(),
+        performance_data=all_data,
+        excluded_index_names=_missing_configured_indices(all_data),
     )
     BACKEND_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
     with BACKEND_DATA_PATH.open("w", encoding="utf-8") as f:
@@ -144,6 +146,11 @@ def _latest_data_date(all_data):
     if latest is None:
         return None
     return latest.date().isoformat() if hasattr(latest, "date") else str(latest)
+
+
+def _missing_configured_indices(all_data):
+    configured = [index for indices in INDEX_CATEGORIES.values() for index in indices]
+    return [index for index in configured if index not in all_data]
 
 
 if __name__ == "__main__":

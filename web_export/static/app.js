@@ -5,10 +5,30 @@ const state = {
   sortDirection: "desc",
   search: "",
   amcOnly: false,
+  performanceSelected: new Set(),
 };
 
 const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 const percentFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+const inrFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
+const chartColors = [
+  "#1d5f8b",
+  "#4fb745",
+  "#ff7818",
+  "#7c3aed",
+  "#0f766e",
+  "#b45309",
+  "#be123c",
+  "#2563eb",
+  "#65a30d",
+  "#9333ea",
+  "#c2410c",
+  "#0369a1",
+];
 
 document.addEventListener("DOMContentLoaded", async () => {
   const response = await fetch("data.json", { cache: "no-store" });
@@ -38,6 +58,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
+  document.getElementById("performanceSelectAll").addEventListener("click", () => {
+    setAllPerformanceSeries(true);
+  });
+
+  document.getElementById("performanceClear").addEventListener("click", () => {
+    setAllPerformanceSeries(false);
+  });
+
+  initPerformanceSelection();
   renderTabs();
   renderMeta();
   render();
@@ -64,7 +93,14 @@ function render() {
   const period = state.data.periods[state.periodIndex];
   const rows = sortedRows(filteredRows(period.rows));
   renderTable(period, rows);
+  renderPerformance();
   renderFooter();
+}
+
+function initPerformanceSelection() {
+  const performance = state.data.performance;
+  if (!hasPerformanceData(performance)) return;
+  state.performanceSelected = new Set(performance.series.map((series) => series.indexName));
 }
 
 function renderMeta() {
@@ -87,6 +123,16 @@ function renderMeta() {
       <a href="${escapeHtml(source.url)}" aria-label="Open source">↗</a>
     </li>
   `).join("");
+
+  const excludedIndexNote = document.getElementById("excludedIndexNote");
+  const excludedIndexes = Array.isArray(state.data.excludedIndexes) ? state.data.excludedIndexes : [];
+  if (excludedIndexes.length === 0) {
+    excludedIndexNote.hidden = true;
+    excludedIndexNote.textContent = "";
+  } else {
+    excludedIndexNote.hidden = false;
+    excludedIndexNote.textContent = `${excludedIndexes.length} configured indexes are excluded because cached TRI data is unavailable: ${excludedIndexes.join(", ")}.`;
+  }
 }
 
 function filteredRows(rows) {
@@ -153,6 +199,188 @@ function renderTable(period, rows) {
   tbody.appendChild(fragment);
 }
 
+function renderPerformance() {
+  const performance = state.data.performance;
+  const description = document.getElementById("performanceDescription");
+  const unavailable = document.getElementById("performanceUnavailable");
+  const controls = document.getElementById("performanceControls");
+  const chartWrap = document.querySelector(".chart-wrap");
+  const chart = document.getElementById("performanceChart");
+  const actions = document.querySelector(".performance-actions");
+
+  if (!hasPerformanceData(performance)) {
+    description.textContent = "";
+    unavailable.textContent = "Cumulative performance chart data is not available in this report.";
+    unavailable.hidden = false;
+    controls.innerHTML = "";
+    chart.innerHTML = "";
+    chartWrap.hidden = true;
+    actions.hidden = true;
+    return;
+  }
+
+  unavailable.hidden = true;
+  chartWrap.hidden = false;
+  actions.hidden = false;
+  description.textContent = `The chart below shows cumulative performance of ${formatInr(performance.initialInvestment)} invested in each of the indices on ${formatDateNumeric(performance.startDate)}. Data through ${formatDateNumeric(performance.endDate)}.`;
+  renderPerformanceControls(performance);
+  renderPerformanceChart(performance);
+}
+
+function renderPerformanceControls(performance) {
+  const controls = document.getElementById("performanceControls");
+  controls.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+
+  performance.series.forEach((series, index) => {
+    const color = chartColors[index % chartColors.length];
+    const label = document.createElement("label");
+    label.className = "performance-toggle";
+
+    const swatch = document.createElement("span");
+    swatch.className = "performance-swatch";
+    swatch.style.backgroundColor = color;
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = state.performanceSelected.has(series.indexName);
+    input.addEventListener("change", (event) => {
+      if (event.target.checked) {
+        state.performanceSelected.add(series.indexName);
+      } else {
+        state.performanceSelected.delete(series.indexName);
+      }
+      renderPerformanceChart(performance);
+    });
+
+    const text = document.createElement("span");
+    text.textContent = series.indexName;
+
+    label.append(input, swatch, text);
+    fragment.appendChild(label);
+  });
+
+  controls.appendChild(fragment);
+}
+
+function renderPerformanceChart(performance) {
+  const chart = document.getElementById("performanceChart");
+  chart.innerHTML = "";
+
+  const allPoints = performance.series.flatMap((series) => series.points || []);
+  if (allPoints.length === 0) return;
+
+  const width = 1000;
+  const height = 460;
+  const margin = { top: 24, right: 28, bottom: 58, left: 76 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const values = allPoints.map((point) => Number(point.value)).filter(Number.isFinite);
+  const dates = allPoints.map((point) => parseDate(point.date)).filter((date) => !Number.isNaN(date));
+  const minTime = Math.min(...dates);
+  const maxTime = Math.max(...dates);
+  const minValue = Math.min(0, ...values);
+  const maxValue = Math.max(...values);
+  const valuePadding = Math.max((maxValue - minValue) * 0.08, 100);
+  const yMin = minValue;
+  const yMax = maxValue + valuePadding;
+  const visibleCount = performance.series.filter((series) => state.performanceSelected.has(series.indexName)).length;
+
+  chart.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  chart.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  chart.setAttribute("aria-label", "Cumulative performance line chart");
+
+  const xScale = (dateValue) => margin.left + ((dateValue - minTime) / (maxTime - minTime || 1)) * plotWidth;
+  const yScale = (value) => margin.top + (1 - ((value - yMin) / (yMax - yMin || 1))) * plotHeight;
+
+  const gridGroup = svgElement("g", { class: "chart-grid" });
+  const axisGroup = svgElement("g", { class: "chart-axis" });
+  const lineGroup = svgElement("g", { class: "chart-lines" });
+
+  for (const tickValue of yTicks(yMin, yMax, 5)) {
+    const y = yScale(tickValue);
+    gridGroup.appendChild(svgElement("line", {
+      x1: margin.left,
+      y1: y,
+      x2: width - margin.right,
+      y2: y,
+    }));
+    axisGroup.appendChild(svgText(margin.left - 10, y + 4, formatInr(tickValue), "end", "chart-y-label"));
+  }
+
+  for (const tickTime of xTicks(minTime, maxTime, 5)) {
+    const x = xScale(tickTime);
+    gridGroup.appendChild(svgElement("line", {
+      x1: x,
+      y1: margin.top,
+      x2: x,
+      y2: height - margin.bottom,
+    }));
+    axisGroup.appendChild(svgText(x, height - margin.bottom + 28, formatDateNumeric(new Date(tickTime).toISOString().slice(0, 10)), "middle", "chart-x-label"));
+  }
+
+  axisGroup.appendChild(svgElement("line", {
+    class: "chart-domain",
+    x1: margin.left,
+    y1: height - margin.bottom,
+    x2: width - margin.right,
+    y2: height - margin.bottom,
+  }));
+  axisGroup.appendChild(svgElement("line", {
+    class: "chart-domain",
+    x1: margin.left,
+    y1: margin.top,
+    x2: margin.left,
+    y2: height - margin.bottom,
+  }));
+
+  performance.series.forEach((series, index) => {
+    if (!state.performanceSelected.has(series.indexName)) return;
+    const pathData = (series.points || [])
+      .filter((point) => Number.isFinite(Number(point.value)) && !Number.isNaN(parseDate(point.date)))
+      .map((point, pointIndex) => {
+        const command = pointIndex === 0 ? "M" : "L";
+        return `${command}${xScale(parseDate(point.date)).toFixed(2)},${yScale(Number(point.value)).toFixed(2)}`;
+      })
+      .join(" ");
+
+    if (!pathData) return;
+    const path = svgElement("path", {
+      class: "chart-line",
+      d: pathData,
+      stroke: chartColors[index % chartColors.length],
+    });
+    const title = svgElement("title");
+    title.textContent = series.indexName;
+    path.appendChild(title);
+    lineGroup.appendChild(path);
+  });
+
+  chart.append(gridGroup, axisGroup, lineGroup);
+
+  if (visibleCount === 0) {
+    chart.appendChild(svgText(width / 2, height / 2, "No indexes selected", "middle", "chart-empty"));
+  }
+}
+
+function hasPerformanceData(performance) {
+  return Boolean(
+    performance &&
+    performance.startDate &&
+    performance.endDate &&
+    Array.isArray(performance.series) &&
+    performance.series.length > 0
+  );
+}
+
+function setAllPerformanceSeries(checked) {
+  const performance = state.data.performance;
+  if (!hasPerformanceData(performance)) return;
+  state.performanceSelected = new Set(checked ? performance.series.map((series) => series.indexName) : []);
+  renderPerformanceControls(performance);
+  renderPerformanceChart(performance);
+}
+
 function renderFooter() {
   const date = new Date(state.data.generatedAt);
   document.getElementById("updatedAt").textContent = `Updated ${date.toLocaleDateString("en-IN", {
@@ -168,6 +396,16 @@ function formatDateOnly(value) {
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateNumeric(value) {
+  if (!value) return "Not available";
+  const date = new Date(`${value}T00:00:00`);
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
     year: "numeric",
   });
 }
@@ -190,6 +428,43 @@ function formatPercent(value) {
 
 function numberOrDash(value) {
   return value === null || value === undefined ? "-" : numberFormat.format(value);
+}
+
+function formatInr(value) {
+  return inrFormat.format(Number(value) || 0);
+}
+
+function parseDate(value) {
+  return new Date(`${value}T00:00:00`).getTime();
+}
+
+function yTicks(minValue, maxValue, count) {
+  const step = (maxValue - minValue) / Math.max(count - 1, 1);
+  return Array.from({ length: count }, (_, index) => minValue + step * index);
+}
+
+function xTicks(minTime, maxTime, count) {
+  const step = (maxTime - minTime) / Math.max(count - 1, 1);
+  return Array.from({ length: count }, (_, index) => Math.round(minTime + step * index));
+}
+
+function svgElement(name, attributes = {}) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value);
+  }
+  return element;
+}
+
+function svgText(x, y, value, anchor, className) {
+  const text = svgElement("text", {
+    x,
+    y,
+    "text-anchor": anchor,
+    class: className,
+  });
+  text.textContent = value;
+  return text;
 }
 
 function escapeHtml(value) {
