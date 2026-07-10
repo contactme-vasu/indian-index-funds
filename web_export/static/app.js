@@ -276,8 +276,19 @@ function renderPerformanceChart(performance) {
   const chart = document.getElementById("performanceChart");
   chart.innerHTML = "";
 
-  const allPoints = performance.series.flatMap((series) => series.points || []);
-  if (allPoints.length === 0) return;
+  const visibleSeries = performance.series.filter((series) => state.performanceSelected.has(series.indexName));
+  const visibleCount = visibleSeries.length;
+  const activeSeries = state.performanceSelected.has(state.performanceActive) ? state.performanceActive : null;
+
+  // Axis domain is derived ONLY from the currently selected series, so the
+  // chart rescales dynamically as the user checks/unchecks index funds
+  // instead of staying fixed to the full universe of series.
+  const allPoints = visibleSeries.flatMap((series) => series.points || []);
+  if (visibleCount === 0 || allPoints.length === 0) {
+    chart.setAttribute("viewBox", `0 0 1000 460`);
+    chart.appendChild(svgText(500, 230, "No indexes selected", "middle", "chart-empty"));
+    return;
+  }
 
   const width = 1000;
   const height = 460;
@@ -293,8 +304,6 @@ function renderPerformanceChart(performance) {
   const valuePadding = Math.max((maxValue - minValue) * 0.08, 100);
   const yMin = minValue;
   const yMax = maxValue + valuePadding;
-  const visibleCount = performance.series.filter((series) => state.performanceSelected.has(series.indexName)).length;
-  const activeSeries = state.performanceSelected.has(state.performanceActive) ? state.performanceActive : null;
 
   chart.setAttribute("viewBox", `0 0 ${width} ${height}`);
   chart.setAttribute("preserveAspectRatio", "xMidYMid meet");
@@ -412,10 +421,6 @@ function renderPerformanceChart(performance) {
   });
 
   chart.append(gridGroup, axisGroup, lineGroup, labelGroup);
-
-  if (visibleCount === 0) {
-    chart.appendChild(svgText(width / 2, height / 2, "No indexes selected", "middle", "chart-empty"));
-  }
 }
 
 function hasPerformanceData(performance) {
